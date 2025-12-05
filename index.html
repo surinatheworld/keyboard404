@@ -258,8 +258,34 @@
                 hit.on('pointerout', () => this.tweens.add({ targets: btn, scaleX: 1, scaleY: 1, duration: 100 }));
                 hit.on('pointerdown', () => { soundFX.init(); this.cameras.main.fadeOut(500); this.time.delayedCall(500, () => this.scene.start('GameScene')); });
                 this.tweens.add({ targets: btn, scaleX: 1.05, scaleY: 1.05, duration: 800, yoyo: true, repeat: -1 });
-                this.add.text(400, 380, '🎮 WASD / Arrows + SPACE', { fontSize: '16px', color: '#aaa' }).setOrigin(0.5);
-                this.add.text(400, 420, '💣 Watch out for bomber planes!', { fontSize: '14px', color: '#ff6b6b' }).setOrigin(0.5);
+
+                // Introduction panel with background
+                const introPanel = this.add.graphics();
+                introPanel.fillStyle(0x000000, 0.6);
+                introPanel.fillRoundedRect(80, 340, 640, 250, 15);
+                introPanel.lineStyle(2, 0xe94560, 1);
+                introPanel.strokeRoundedRect(80, 340, 640, 250, 15);
+
+                // Welcome text
+                this.add.text(400, 365, '✨ Chào mừng bạn đến với KEYBOARD 404 ✨', { fontSize: '16px', color: '#fff', fontFamily: 'Arial', fontStyle: 'bold' }).setOrigin(0.5);
+                this.add.text(400, 390, 'Một game giải trí do Surina tạo ra~', { fontSize: '13px', color: '#aaa', fontStyle: 'italic' }).setOrigin(0.5);
+
+                // Instructions header
+                this.add.text(400, 420, '━━━━ 📖 HƯỚNG DẪN CHƠI ━━━━', { fontSize: '14px', color: '#00ff00', fontFamily: 'Arial Black' }).setOrigin(0.5);
+
+                // Instruction items
+                this.add.text(400, 450, '🎮 Các phím di chuyển là WASD và SPACE', { fontSize: '12px', color: '#fff' }).setOrigin(0.5);
+                this.add.text(400, 472, '⌨️ Bàn phím của bạn không bị lỗi', { fontSize: '12px', color: '#ffff00' }).setOrigin(0.5);
+                this.add.text(400, 494, '🚩 Checkpoint có FAKE và REAL', { fontSize: '12px', color: '#ff9900' }).setOrigin(0.5);
+                this.add.text(400, 516, '⬇️ Quay lại REAL bằng cách nhảy xuống đáy xã hội', { fontSize: '12px', color: '#00ffff' }).setOrigin(0.5);
+
+                // Warning text with shake
+                const warningText = this.add.text(400, 545, '🤫 Đừng tin những gì tôi nói.', { fontSize: '13px', color: '#ff6b6b', fontStyle: 'italic' }).setOrigin(0.5);
+                this.tweens.add({ targets: warningText, x: 402, duration: 100, yoyo: true, repeat: -1 });
+
+                // Love message with pulse
+                const loveText = this.add.text(400, 575, '❤️ Chúc bạn chơi game vui vẻ - From Surina with Love ❤️', { fontSize: '14px', color: '#ff69b4', fontFamily: 'Arial', fontStyle: 'bold' }).setOrigin(0.5);
+                this.tweens.add({ targets: loveText, alpha: 0.6, duration: 800, yoyo: true, repeat: -1 });
             }
         }
 
