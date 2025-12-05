@@ -10,10 +10,23 @@
 
 <body>
     <div id="game-container"></div>
-    <div id="death-counter"><span id="skull">💀</span><span id="death-count">0</span></div>
-    <div id="height-indicator"><span>📍 </span><span id="current-height">0</span>m</div>
+    <div id="death-counter"><span id="timer-icon">⏱️</span><span id="game-timer">0:00</span></div>
+    <div id="height-indicator"><span>📍 </span><span id="current-height">0</span>m | <span id="skull">💀</span><span
+            id="death-count">0</span></div>
     <div id="troll-message" class="hidden"></div>
-    <div id="teleport-hint">🚀 1-9 = Teleport | 0 = Finish (710m)</div>
+    <div id="virus-popup" class="hidden">
+        <div class="virus-titlebar">Virus Alert! <span class="virus-buttons">? ✕</span></div>
+        <div class="virus-content">
+            <div class="virus-icon">💻⏳</div>
+            <div class="virus-text">Downloading Virus...</div>
+        </div>
+        <div class="virus-progress">
+            <div class="virus-bar"></div>
+        </div>
+        <div class="virus-btns"><button>OK</button><button>Cancel</button></div>
+    </div>
+
+
     <div id="cat-popup" class="hidden">
         <img src="cat.png" alt="Laughing Cat">
         <p>Check your stupid skills and keyboard? 😹</p>
@@ -22,6 +35,76 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
     <script>
         const GameSettings = { asianMode: true, worldHeight: 8000, worldWidth: 800, wonkyMinHeight: 100 };
+
+        // Simple Sound Effects using Web Audio API
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.enabled = true;
+            }
+            init() {
+                if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            play(type) {
+                if (!this.enabled || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                const now = this.ctx.currentTime;
+                switch (type) {
+                    case 'jump':
+                        osc.frequency.setValueAtTime(300, now);
+                        osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                        gain.gain.setValueAtTime(0.2, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                        osc.start(now); osc.stop(now + 0.15);
+                        break;
+                    case 'fall':
+                        osc.frequency.setValueAtTime(400, now);
+                        osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
+                        gain.gain.setValueAtTime(0.3, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+                        osc.start(now); osc.stop(now + 0.5);
+                        break;
+                    case 'boom':
+                        osc.type = 'sawtooth';
+                        osc.frequency.setValueAtTime(150, now);
+                        osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                        gain.gain.setValueAtTime(0.4, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                        osc.start(now); osc.stop(now + 0.4);
+                        break;
+                    case 'glitch':
+                        osc.type = 'square';
+                        osc.frequency.setValueAtTime(800, now);
+                        osc.frequency.setValueAtTime(200, now + 0.05);
+                        osc.frequency.setValueAtTime(600, now + 0.1);
+                        gain.gain.setValueAtTime(0.15, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                        osc.start(now); osc.stop(now + 0.2);
+                        break;
+                    case 'checkpoint':
+                        osc.frequency.setValueAtTime(523, now);
+                        osc.frequency.setValueAtTime(659, now + 0.1);
+                        osc.frequency.setValueAtTime(784, now + 0.2);
+                        gain.gain.setValueAtTime(0.2, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                        osc.start(now); osc.stop(now + 0.4);
+                        break;
+                    case 'win':
+                        osc.frequency.setValueAtTime(523, now);
+                        osc.frequency.setValueAtTime(659, now + 0.15);
+                        osc.frequency.setValueAtTime(784, now + 0.3);
+                        osc.frequency.setValueAtTime(1047, now + 0.45);
+                        gain.gain.setValueAtTime(0.25, now);
+                        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.7);
+                        osc.start(now); osc.stop(now + 0.7);
+                        break;
+                }
+            }
+        }
+        const soundFX = new SoundFX();
 
         class WonkyControls {
             constructor(scene) {
@@ -42,12 +125,17 @@
             shouldActivate() { return this.getCurrentHeight() >= GameSettings.wonkyMinHeight; }
             start() { this.schedulNextGlitch(); }
             stop() { if (this.cycleTimer) this.cycleTimer.remove(); if (this.glitchTimer) this.glitchTimer.remove(); this.deactivateGlitch(); }
-            schedulNextGlitch() { this.cycleTimer = this.scene.time.delayedCall(Phaser.Math.Between(6000, 12000), () => this.activateGlitch()); }
+            schedulNextGlitch() { this.cycleTimer = this.scene.time.delayedCall(Phaser.Math.Between(3000, 6000), () => this.activateGlitch()); }
             activateGlitch() {
                 if (!this.shouldActivate()) { this.schedulNextGlitch(); return; }
                 const glitch = Phaser.Utils.Array.GetRandom(this.glitchTypes);
                 this.currentGlitch = glitch; this.isActive = true;
                 this.glitchTimer = this.scene.time.delayedCall(glitch.duration, () => { this.deactivateGlitch(); this.schedulNextGlitch(); });
+                soundFX.play('glitch');
+                // Show virus popup for 500ms
+                const virusPopup = document.getElementById('virus-popup');
+                virusPopup.classList.remove('hidden');
+                setTimeout(() => virusPopup.classList.add('hidden'), 500);
             }
             deactivateGlitch() { this.isActive = false; this.currentGlitch = null; this.lastDirection = null; }
             processMovement(left, right) {
@@ -108,7 +196,7 @@
                 this.bombStunned = true;
                 this.bombDirection = direction;
                 this.sprite.setTint(0xff6666);
-                this.scene.time.delayedCall(500, () => { this.bombStunned = false; this.sprite.clearTint(); });
+                this.scene.time.delayedCall(1000, () => { this.bombStunned = false; this.sprite.clearTint(); });
             }
             catStun() {
                 this.bombStunned = true;
@@ -132,7 +220,7 @@
                 else if (m.right) { m.slippery ? this.sprite.setAccelerationX(400) : this.sprite.setVelocityX(this.speed); this.sprite.setFlipX(false); }
                 else { m.slippery ? this.sprite.setAccelerationX(0) : this.sprite.setVelocityX(0); }
                 if (m.slippery) this.sprite.body.velocity.x = Phaser.Math.Clamp(this.sprite.body.velocity.x, -280, 280);
-                if (keys.jump && onFloor) { this.sprite.setVelocityY(this.jumpForce * wonky.getJumpMultiplier()); this.highestY = this.sprite.y; }
+                if (keys.jump && onFloor) { this.sprite.setVelocityY(this.jumpForce * wonky.getJumpMultiplier()); this.highestY = this.sprite.y; soundFX.play('jump'); }
                 if (!keys.jumpHeld && this.sprite.body.velocity.y < -100) this.sprite.setVelocityY(this.sprite.body.velocity.y * 0.6);
                 if (!onFloor) {
                     this.sprite.anims.play(this.sprite.body.velocity.y > 0 ? 'fall' : 'jump', true);
@@ -159,7 +247,7 @@
                     const s = this.add.circle(Phaser.Math.Between(0, 800), Phaser.Math.Between(0, 600), Phaser.Math.Between(1, 2), 0xffffff, Phaser.Math.FloatBetween(0.3, 1));
                     this.tweens.add({ targets: s, alpha: 0.3, duration: Phaser.Math.Between(1000, 3000), yoyo: true, repeat: -1 });
                 }
-                this.add.text(400, 70, '🐕 ICY UNIVERSE 🐕', { fontSize: '48px', fontFamily: 'Arial Black', color: '#fff', stroke: '#e94560', strokeThickness: 8 }).setOrigin(0.5);
+                this.add.text(400, 70, '🐕 KEYBOARD 404 🐕', { fontSize: '48px', fontFamily: 'Arial Black', color: '#fff', stroke: '#e94560', strokeThickness: 8 }).setOrigin(0.5);
                 this.add.text(400, 130, '~ 710m EXTENDED EDITION ~', { fontSize: '20px', color: '#00ff00', fontStyle: 'italic' }).setOrigin(0.5);
                 this.add.text(400, 175, '⌨️ Bàn phím ngáo từ 100m! ⌨️', { fontSize: '16px', color: '#ff6b6b' }).setOrigin(0.5);
                 const btn = this.add.container(400, 280);
@@ -168,11 +256,10 @@
                 const hit = this.add.rectangle(400, 280, 200, 60).setInteractive({ useHandCursor: true });
                 hit.on('pointerover', () => this.tweens.add({ targets: btn, scaleX: 1.1, scaleY: 1.1, duration: 100 }));
                 hit.on('pointerout', () => this.tweens.add({ targets: btn, scaleX: 1, scaleY: 1, duration: 100 }));
-                hit.on('pointerdown', () => { this.cameras.main.fadeOut(500); this.time.delayedCall(500, () => this.scene.start('GameScene')); });
+                hit.on('pointerdown', () => { soundFX.init(); this.cameras.main.fadeOut(500); this.time.delayedCall(500, () => this.scene.start('GameScene')); });
                 this.tweens.add({ targets: btn, scaleX: 1.05, scaleY: 1.05, duration: 800, yoyo: true, repeat: -1 });
                 this.add.text(400, 380, '🎮 WASD / Arrows + SPACE', { fontSize: '16px', color: '#aaa' }).setOrigin(0.5);
-                this.add.text(400, 420, '🚀 1-9 = Teleport to Checkpoints', { fontSize: '14px', color: '#00ff00' }).setOrigin(0.5);
-                this.add.text(400, 460, '💣 Watch out for bomber planes!', { fontSize: '14px', color: '#ff6b6b' }).setOrigin(0.5);
+                this.add.text(400, 420, '💣 Watch out for bomber planes!', { fontSize: '14px', color: '#ff6b6b' }).setOrigin(0.5);
             }
         }
 
@@ -194,6 +281,8 @@
                 this.fakeCheckpoints = this.physics.add.staticGroup();
                 this.bombs = this.physics.add.group();
                 this.spawnPoint = { x: 400, y: H - 50 };
+                this.gameStartTime = 0;
+                this.gameElapsedTime = 0;
                 this.checkpointPositions = [
                     { x: 400, y: H - 520 }, { x: 400, y: H - 1220 }, { x: 400, y: H - 2020 },
                     { x: 400, y: H - 2820 }, { x: 400, y: H - 3580 }, { x: 400, y: H - 4440 },
@@ -214,16 +303,19 @@
                 this.physics.add.collider(this.playerSprite, this.bouncePads, (p, pad) => { if (p.body.touching.down) { p.setVelocityY(-450); pad.setFillStyle(0x00ff00); this.time.delayedCall(200, () => pad.setFillStyle(0xff00ff)); } });
                 this.physics.add.overlap(this.playerSprite, this.knockbackZones, () => this.playerFall());
                 this.physics.add.overlap(this.playerSprite, this.checkpoints, (p, cp) => { if (!cp.activated) { cp.activated = true; cp.setFillStyle(0x00ff00); this.spawnPoint = { x: cp.x, y: cp.y - 30 }; this.showMessage('✅ Checkpoint!'); } });
-                this.physics.add.collider(this.playerSprite, this.fakeCheckpoints, (p, fake) => { if (!fake.triggered) { fake.triggered = true; this.showMessage('😈 FAKE!'); this.time.delayedCall(300, () => { fake.body.enable = false; fake.setAlpha(0.3); }); } });
+                this.physics.add.collider(this.playerSprite, this.fakeCheckpoints, (p, fake) => { if (!fake.triggered) { fake.triggered = true; this.showMessage(fake.message); this.time.delayedCall(300, () => { fake.body.enable = false; fake.setAlpha(0.3); }); } });
                 this.physics.add.overlap(this.playerSprite, this.bombs, (p, bomb) => this.hitByBomb(bomb));
                 this.physics.add.overlap(this.playerSprite, this.finishZone, () => this.levelComplete());
                 this.wonkyControls = new WonkyControls(this);
                 this.wonkyControls.setPlayer(this.playerSprite);
                 this.wonkyControls.start();
                 this.keys = { W: this.input.keyboard.addKey('W'), A: this.input.keyboard.addKey('A'), D: this.input.keyboard.addKey('D'), SPACE: this.input.keyboard.addKey('SPACE'), UP: this.input.keyboard.addKey('UP'), LEFT: this.input.keyboard.addKey('LEFT'), RIGHT: this.input.keyboard.addKey('RIGHT') };
-                for (let i = 0; i <= 9; i++) this.input.keyboard.on('keydown-' + ['ZERO', 'ONE', 'TWO', 'THREE', 'FOUR', 'FIVE', 'SIX', 'SEVEN', 'EIGHT', 'NINE'][i], () => this.teleportTo(i === 0 ? 9 : i - 1));
+
                 this.airplaneTimer = this.time.addEvent({ delay: 8000, callback: () => this.spawnAirplane(), loop: true });
                 this.cameras.main.fadeIn(500);
+                this.gameStartTime = this.time.now;
+
+
             }
             spawnAirplane() {
                 const playerY = this.playerSprite.y;
@@ -248,7 +340,7 @@
                 const count = Phaser.Math.Between(3, 5);
                 for (let i = 0; i < count; i++) {
                     this.time.delayedCall(i * 80, () => {
-                        const bomb = this.add.circle(x + Phaser.Math.Between(-40, 40), y, 10, 0xff0000);
+                        const bomb = this.add.circle(x + Phaser.Math.Between(-120, 120), y, 10, 0xff0000);
                         bomb.setStrokeStyle(2, 0xffff00);
                         this.physics.add.existing(bomb);
                         bomb.body.setBounce(0.9, 0.9);
@@ -268,18 +360,19 @@
             hitByBomb(bomb) {
                 if (!this.player.bombStunned) {
                     this.player.hitByBomb(bomb.direction || (Math.random() > 0.5 ? 1 : -1));
-                    this.showMessage('💥 BOOM! Chạy loạn 0.5s!');
+                    this.showMessage('💥 BOOM! Chạy loạn 1s!');
                     this.cameras.main.shake(200, 0.01);
+                    soundFX.play('boom');
                 }
                 bomb.destroy();
             }
             teleportTo(index) {
                 const H = GameSettings.worldHeight;
                 if (index === 9) { this.playerSprite.setPosition(400, H - 7100); this.showMessage('🏆 FINISH!'); }
-                else { const pos = this.checkpointPositions[index]; this.playerSprite.setPosition(pos.x, pos.y - 30); this.spawnPoint = { x: pos.x, y: pos.y - 30 }; this.showMessage('🚀 CP' + (index + 1)); }
+                else { const pos = this.checkpointPositions[index]; this.playerSprite.setPosition(pos.x, pos.y - 30); this.spawnPoint = { x: pos.x, y: pos.y - 30 }; this.showMessage('🚀 Zone ' + (index + 1)); }
                 this.playerSprite.setVelocity(0, 0);
             }
-            playerFall() { this.player.knockDown(); GameState.addFall(); this.time.delayedCall(600, () => { this.playerSprite.setPosition(this.spawnPoint.x, this.spawnPoint.y); this.playerSprite.setVelocity(0, 0); }); }
+            playerFall() { this.player.knockDown(); GameState.addFall(); soundFX.play('fall'); this.time.delayedCall(600, () => { this.playerSprite.setPosition(this.spawnPoint.x, this.spawnPoint.y); this.playerSprite.setVelocity(0, 0); }); }
             createBackground() {
                 const H = GameSettings.worldHeight;
                 for (let i = 0; i < H; i += 600) { const g = this.add.graphics(); g.fillStyle(Phaser.Display.Color.GetColor(26 + (i / H) * 100, 33 + (i / H) * 100, 62 + (i / H) * 140)); g.fillRect(0, H - i - 600, 800, 600); }
@@ -293,27 +386,29 @@
                 this.createPlatform(250, H - 170, 160, 20); this.createPlatform(500, H - 220, 160, 20);
                 this.createPlatform(200, H - 270, 160, 20); this.createPlatform(500, H - 320, 160, 20);
                 this.createPlatform(250, H - 370, 160, 20); this.createPlatform(500, H - 420, 160, 20);
-                this.createPlatform(200, H - 470, 160, 20);
-                this.createCheckpoint(400, H - 520); this.createPlatform(400, H - 520, 200, 25);
+                this.createPlatform(200, H - 470, 160, 20); this.createPlatform(500, H - 520, 100, 20);
+
                 // Zone 2 (50-120m)
                 this.createPlatform(250, H - 580, 150, 20); this.createPlatform(550, H - 640, 150, 20);
-                this.createFakeCheckpoint(250, H - 700);
+
                 this.createPlatform(250, H - 700, 150, 20); this.createPlatform(550, H - 760, 150, 20);
+                this.createPlatform(400, H - 670, 100, 20); // New platform requested
                 this.createPlatform(250, H - 820, 150, 20); this.createPlatform(550, H - 880, 150, 20);
                 this.createPlatform(250, H - 940, 150, 20); this.createPlatform(550, H - 1000, 150, 20);
                 this.createPlatform(250, H - 1060, 150, 20); this.createPlatform(550, H - 1120, 150, 20);
                 this.createPlatform(300, H - 1180, 150, 20); this.createPlatform(400, H - 1150, 50, 20);
-                this.createCheckpoint(400, H - 1220); this.createPlatform(400, H - 1220, 200, 25);
+                this.createPlatform(400, H - 1220, 200, 25);
                 // Zone 3 - Ice (120-200m)
                 this.createIce(280, H - 1280, 140, 20); this.createIce(520, H - 1340, 140, 20);
-                this.createPlatform(280, H - 1400, 140, 20); this.createIce(520, H - 1460, 140, 20);
+                this.createPlatform(280, H - 1400, 140, 20); this.createPlatform(400, H - 1460, 80, 20); this.createIce(520, H - 1460, 140, 20);
                 this.createIce(280, H - 1520, 140, 20); this.createPlatform(520, H - 1580, 140, 20);
-                this.createFakeCheckpoint(520, H - 1640);
+                this.createTrollCheckpoint(400, H - 1650, 0xff0000, '😈 Fake');
+
                 this.createIce(280, H - 1640, 140, 20); this.createIce(520, H - 1700, 140, 20);
                 this.createPlatform(280, H - 1760, 140, 20); this.createIce(520, H - 1820, 140, 20);
                 this.createIce(280, H - 1880, 140, 20); this.createPlatform(520, H - 1940, 140, 20);
                 this.createPlatform(350, H - 2000, 150, 20);
-                this.createCheckpoint(400, H - 2020); this.createPlatform(400, H - 2020, 200, 25);
+                this.createPlatform(400, H - 2020, 200, 25);
                 // Zone 4 - Bounce (200-280m)
                 this.createPlatform(300, H - 2080, 160, 20); this.createBouncePad(500, H - 2100, 80);
                 this.createPlatform(400, H - 2170, 160, 20); this.createPlatform(550, H - 2240, 160, 20);
@@ -322,16 +417,16 @@
                 this.createPlatform(400, H - 2510, 160, 20); this.createPlatform(550, H - 2580, 160, 20);
                 this.createBouncePad(280, H - 2600, 80); this.createPlatform(420, H - 2680, 160, 20);
                 this.createPlatform(300, H - 2750, 160, 20);
-                this.createCheckpoint(400, H - 2820); this.createPlatform(400, H - 2820, 200, 25);
+                this.createPlatform(400, H - 2820, 200, 25);
                 // Zone 5 - Mix (280-360m)
                 this.createIce(280, H - 2880, 140, 20); this.createPlatform(520, H - 2940, 140, 20);
-                this.createFakeCheckpoint(280, H - 3000);
+
                 this.createIce(280, H - 3000, 140, 20); this.createPlatform(520, H - 3060, 140, 20);
                 this.createIce(280, H - 3120, 140, 20); this.createPlatform(520, H - 3180, 140, 20);
                 this.createIce(280, H - 3240, 140, 20); this.createPlatform(520, H - 3300, 140, 20);
                 this.createIce(280, H - 3360, 140, 20); this.createPlatform(520, H - 3420, 140, 20);
                 this.createIce(280, H - 3480, 140, 20); this.createPlatform(350, H - 3540, 150, 20);
-                this.createCheckpoint(400, H - 3580); this.createPlatform(400, H - 3580, 200, 25);
+                this.createPlatform(400, H - 3580, 200, 25);
                 // Zone 6 (360-440m)
                 this.createPlatform(280, H - 3640, 150, 20); this.createPlatform(520, H - 3700, 150, 20);
                 this.createPlatform(280, H - 3760, 150, 20); this.createPlatform(520, H - 3820, 150, 20);
@@ -340,15 +435,16 @@
                 this.createPlatform(280, H - 4120, 150, 20); this.createPlatform(520, H - 4180, 150, 20);
                 this.createPlatform(280, H - 4240, 150, 20); this.createPlatform(520, H - 4300, 150, 20);
                 this.createPlatform(280, H - 4360, 150, 20); this.createPlatform(350, H - 4420, 150, 20);
-                this.createCheckpoint(400, H - 4440); this.createPlatform(400, H - 4440, 200, 25);
+                this.createPlatform(400, H - 4440, 200, 25);
                 // Zone 7 - EASIER (440-530m) - More space between platforms!  
                 this.createPlatform(300, H - 4500, 160, 20); this.createPlatform(400, H - 4550, 160, 20); this.createPlatform(500, H - 4600, 160, 20);
                 this.createPlatform(400, H - 4650, 160, 20); this.createPlatform(300, H - 4700, 160, 20); this.createPlatform(400, H - 4750, 160, 20);
                 this.createPlatform(500, H - 4800, 160, 20); this.createPlatform(400, H - 4850, 160, 20); this.createPlatform(300, H - 4900, 160, 20);
                 this.createPlatform(400, H - 4950, 160, 20); this.createPlatform(500, H - 5000, 160, 20); this.createPlatform(400, H - 5050, 160, 20);
+                this.createTrollCheckpoint(400, H - 4800, 0x00ff00, 'Nhảy xuống đáy xã hội để có thể "quay lại" điểm check point.');
                 this.createPlatform(300, H - 5100, 160, 20); this.createPlatform(400, H - 5150, 160, 20); this.createPlatform(500, H - 5225, 120, 20);
                 this.createPlatform(300, H - 5250, 160, 20);
-                this.createCheckpoint(400, H - 5300); this.createPlatform(400, H - 5300, 200, 25);
+                this.createPlatform(400, H - 5300, 200, 25);
                 // Zone 8 - GAPS EASIER (530-620m)
                 this.createPlatform(300, H - 5380, 150, 20); this.createPlatform(500, H - 5450, 150, 20);
                 this.createPlatform(300, H - 5530, 150, 20); this.createPlatform(500, H - 5600, 150, 20);
@@ -356,7 +452,7 @@
                 this.createPlatform(300, H - 5830, 150, 20); this.createPlatform(500, H - 5900, 150, 20);
                 this.createPlatform(400, H - 5990, 180, 20); this.createPlatform(400, H - 6080, 180, 20);
                 this.createPlatform(200, H - 6140, 60, 20); this.createPlatform(650, H - 6035, 100, 20);
-                this.createCheckpoint(400, H - 6200); this.createPlatform(400, H - 6200, 200, 25);
+                this.createPlatform(400, H - 6200, 200, 25);
                 // Zone 9 - MIXED EASIER (620-710m)
                 this.createPlatform(280, H - 6280, 160, 20); this.createPlatform(520, H - 6350, 160, 20);
                 this.createPlatform(280, H - 6430, 160, 20); this.createIce(520, H - 6500, 160, 20);
@@ -378,7 +474,7 @@
             createIce(x, y, w, h) { const ice = this.add.rectangle(x, y, w, h, 0x87CEEB); ice.setStrokeStyle(2, 0x4682B4).setAlpha(0.85); this.physics.add.existing(ice, true); this.iceBlocks.add(ice); }
             createBouncePad(x, y, w) { const pad = this.add.rectangle(x, y, w, 12, 0xff00ff); pad.setStrokeStyle(2, 0xcc00cc); this.physics.add.existing(pad, true); this.bouncePads.add(pad); this.tweens.add({ targets: pad, scaleY: 0.7, duration: 300, yoyo: true, repeat: -1 }); }
             createCheckpoint(x, y) { const cp = this.add.rectangle(x, y, 30, 50, 0xffff00, 0.6); cp.setStrokeStyle(3, 0xffa500); cp.activated = false; this.physics.add.existing(cp, true); this.checkpoints.add(cp); this.add.text(x, y - 35, '🚩', { fontSize: '20px' }).setOrigin(0.5); }
-            createFakeCheckpoint(x, y) { const fake = this.add.rectangle(x, y, 30, 50, 0x1E90FF, 0.6); fake.setStrokeStyle(3, 0x0066cc); fake.triggered = false; this.physics.add.existing(fake, true); this.fakeCheckpoints.add(fake); this.add.text(x, y - 35, '🚩', { fontSize: '20px' }).setOrigin(0.5); }
+            createTrollCheckpoint(x, y, color, msg) { const fake = this.add.rectangle(x, y, 30, 50, color, 0.6); fake.setStrokeStyle(3, 0xffffff); fake.triggered = false; fake.message = msg; this.physics.add.existing(fake, true); this.fakeCheckpoints.add(fake); this.add.text(x, y - 35, '🚩', { fontSize: '20px' }).setOrigin(0.5); }
             createFinishZone(x, y, w, h) { this.finishZone = this.add.rectangle(x, y, w, h, 0x00ff00, 0.3); this.finishZone.setStrokeStyle(4, 0x00ff00); this.physics.add.existing(this.finishZone, true); this.add.text(x, y, '🏆', { fontSize: '40px' }).setOrigin(0.5); this.tweens.add({ targets: this.finishZone, alpha: 0.1, duration: 500, yoyo: true, repeat: -1 }); }
             showMessage(t) { const m = document.getElementById('troll-message'); m.textContent = t; m.classList.remove('hidden'); setTimeout(() => m.classList.add('hidden'), 2000); }
             levelComplete() {
@@ -388,14 +484,25 @@
                 this.playerSprite.body.moves = false; // Stop physics to prevent falling
                 this.airplaneTimer.remove();
                 this.showMessage('🏆 710m CONQUERED! 🏆');
+                soundFX.play('win');
+                const finalMins = Math.floor(this.gameElapsedTime / 60);
+                const finalSecs = this.gameElapsedTime % 60;
+                const finalTime = finalMins + ':' + (finalSecs < 10 ? '0' : '') + finalSecs;
                 this.time.delayedCall(2000, () => {
-                    this.showMessage('Falls: ' + GameState.falls);
+                    this.showMessage('⏱️ Time: ' + finalTime + ' | Falls: ' + GameState.falls);
                     this.time.delayedCall(3000, () => this.scene.start('MenuScene')); // Return to menu
                 });
             }
             update(time, delta) {
                 const k = { left: this.keys.A.isDown || this.keys.LEFT.isDown, right: this.keys.D.isDown || this.keys.RIGHT.isDown, jump: Phaser.Input.Keyboard.JustDown(this.keys.W) || Phaser.Input.Keyboard.JustDown(this.keys.SPACE) || Phaser.Input.Keyboard.JustDown(this.keys.UP), jumpHeld: this.keys.W.isDown || this.keys.SPACE.isDown || this.keys.UP.isDown };
                 this.player.update(k, this.wonkyControls);
+                // Update timer
+                if (this.player.canControl) {
+                    this.gameElapsedTime = Math.floor((this.time.now - this.gameStartTime) / 1000);
+                    const mins = Math.floor(this.gameElapsedTime / 60);
+                    const secs = this.gameElapsedTime % 60;
+                    document.getElementById('game-timer').textContent = mins + ':' + (secs < 10 ? '0' : '') + secs;
+                }
             }
         }
 
@@ -405,6 +512,9 @@
         function showCatPopup() {
             const popup = document.getElementById('cat-popup');
             popup.classList.remove('hidden');
+            const hahaSound = new Audio('hahacat.mp3');
+            hahaSound.volume = 0.7;
+            hahaSound.play().catch(e => console.log('Audio play failed:', e));
             if (game.scene.scenes[1] && game.scene.scenes[1].player) {
                 game.scene.scenes[1].player.catStun();
                 game.scene.scenes[1].showMessage('😿 Mèo cười bạn! Chạy loạn 0.5s!');
@@ -413,20 +523,6 @@
         }
     </script>
     <style>
-        #teleport-hint {
-            position: fixed;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: #00ff00;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-family: monospace;
-            font-size: 14px;
-            z-index: 1000;
-        }
-
         #cat-popup {
             position: fixed;
             top: 50%;
@@ -472,6 +568,95 @@
             50% {
                 transform: translate(-50%, -50%) rotate(2deg);
             }
+        }
+
+        /* Windows XP Virus Alert Popup */
+        #virus-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ece9d8;
+            border: 2px solid #0054e3;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.5), inset 0 0 0 1px #fff;
+            font-family: 'Tahoma', sans-serif;
+            z-index: 10000;
+            min-width: 320px;
+        }
+
+        #virus-popup.hidden {
+            display: none;
+        }
+
+        .virus-titlebar {
+            background: linear-gradient(180deg, #0a246a 0%, #0054e3 8%, #0054e3 92%, #0a246a 100%);
+            color: white;
+            font-weight: bold;
+            font-size: 13px;
+            padding: 4px 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .virus-buttons {
+            font-size: 12px;
+        }
+
+        .virus-content {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+            gap: 15px;
+        }
+
+        .virus-icon {
+            font-size: 40px;
+        }
+
+        .virus-text {
+            font-size: 14px;
+            color: #000;
+        }
+
+        .virus-progress {
+            margin: 0 20px 15px;
+            height: 20px;
+            background: #fff;
+            border: 1px solid #7f9db9;
+        }
+
+        .virus-bar {
+            width: 40%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ff00, #00cc00);
+            animation: virusLoad 0.5s linear;
+        }
+
+        @keyframes virusLoad {
+            from {
+                width: 0%;
+            }
+
+            to {
+                width: 40%;
+            }
+        }
+
+        .virus-btns {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding-bottom: 15px;
+        }
+
+        .virus-btns button {
+            min-width: 75px;
+            padding: 4px 12px;
+            background: #ece9d8;
+            border: 1px solid #7f9db9;
+            cursor: pointer;
+            font-family: 'Tahoma', sans-serif;
         }
     </style>
 </body>
