@@ -1,0 +1,205 @@
+/* Icy Universe - Troll Platformer Styles */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    overflow: hidden;
+}
+
+#game-container {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow:
+        0 0 60px rgba(102, 126, 234, 0.4),
+        0 0 100px rgba(118, 75, 162, 0.2);
+}
+
+#game-container canvas {
+    display: block;
+    border-radius: 12px;
+}
+
+/* Death Counter */
+#death-counter {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 24px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 20px rgba(255, 107, 107, 0.5);
+    z-index: 1000;
+    animation: pulse 2s infinite;
+}
+
+/* Height Indicator */
+#height-indicator {
+    position: fixed;
+    top: 20px;
+    left: 20px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 50px;
+    font-size: 18px;
+    font-weight: bold;
+    box-shadow: 0 4px 20px rgba(102, 126, 234, 0.5);
+    z-index: 1000;
+}
+
+#skull {
+    font-size: 28px;
+    animation: shake 0.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: rotate(0deg);
+    }
+
+    25% {
+        transform: rotate(-5deg);
+    }
+
+    75% {
+        transform: rotate(5deg);
+    }
+}
+
+/* Troll Message Popup */
+#troll-message {
+    position: fixed;
+    bottom: 30px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    padding: 16px 32px;
+    border-radius: 12px;
+    font-size: 18px;
+    font-weight: 500;
+    box-shadow: 0 4px 30px rgba(102, 126, 234, 0.6);
+    z-index: 1000;
+    animation: slideUp 0.3s ease-out;
+}
+
+#troll-message.hidden {
+    display: none;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* Fake Keyboard Popup */
+#keyboard-popup {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(145deg, #2d2d2d, #1a1a1a);
+    border: 2px solid #4a4a4a;
+    border-radius: 8px;
+    padding: 20px 40px;
+    color: white;
+    text-align: center;
+    z-index: 2000;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+    animation: popIn 0.2s ease-out;
+}
+
+#keyboard-popup.hidden {
+    display: none;
+}
+
+.popup-content {
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.popup-small {
+    font-size: 12px;
+    color: #888;
+    margin-top: 8px;
+}
+
+@keyframes popIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.8);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+    }
+}
+
+/* Death Animation Overlay */
+#death-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(255, 0, 0, 0.3);
+    z-index: 500;
+    pointer-events: none;
+    animation: flashRed 0.3s ease-out;
+}
+
+@keyframes flashRed {
+    0% {
+        opacity: 1;
+    }
+
+    100% {
+        opacity: 0;
+    }
+}
+
+/* Loading Text */
+.loading-text {
+    color: white;
+    font-size: 24px;
+    text-align: center;
+}
