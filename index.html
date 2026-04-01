@@ -37,13 +37,37 @@
         const GameSettings = { asianMode: true, worldHeight: 8000, worldWidth: 800, wonkyMinHeight: 100 };
 
         // Simple Sound Effects using Web Audio API
-        class SoundFX {
             constructor() {
                 this.ctx = null;
                 this.enabled = true;
+                this.isPlayingBGM = false;
+                this.bgmInterval = null;
             }
             init() {
-                if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    this.startBGM();
+                }
+            }
+            startBGM() {
+                if (!this.enabled || !this.ctx || this.isPlayingBGM) return;
+                this.isPlayingBGM = true;
+                let step = 0;
+                const melody = [261.63, 329.63, 392.00, 329.63]; // Simple spooky/troll tune
+                this.bgmInterval = setInterval(() => {
+                    if(!this.isPlayingBGM) return;
+                    const time = this.ctx.currentTime;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(melody[step % melody.length], time);
+                    gain.gain.setValueAtTime(0.015, time);
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.3);
+                    osc.start(time); osc.stop(time + 0.3);
+                    step++;
+                }, 300);
             }
             play(type) {
                 if (!this.enabled || !this.ctx) return;
@@ -117,7 +141,8 @@
                     { name: 'RANDOM_IGNORE', duration: 5000 },
                     { name: 'LOW_JUMP', duration: 5000 },
                     { name: 'SLIPPERY', duration: 5000 },
-                    { name: 'REVERSE_JUMP', duration: 4000 }
+                    { name: 'REVERSE_JUMP', duration: 4000 },
+                    { name: 'VIRUS_FREEZE', duration: 4000 }
                 ];
             }
             setPlayer(sprite) { this.playerSprite = sprite; }
@@ -130,12 +155,27 @@
                 if (!this.shouldActivate()) { this.schedulNextGlitch(); return; }
                 const glitch = Phaser.Utils.Array.GetRandom(this.glitchTypes);
                 this.currentGlitch = glitch; this.isActive = true;
-                this.glitchTimer = this.scene.time.delayedCall(glitch.duration, () => { this.deactivateGlitch(); this.schedulNextGlitch(); });
+                
+                if (glitch.name === 'VIRUS_FREEZE') {
+                    const virusPopup = document.getElementById('virus-popup');
+                    virusPopup.classList.remove('hidden');
+                    if(this.playerSprite) this.playerSprite.body.velocity.x = 0;
+                } else {
+                    const randomVisual = Phaser.Math.Between(0, 2);
+                    if (randomVisual === 1) {
+                        this.scene.cameras.main.shake(1000, 0.015);
+                    } else if (randomVisual === 2) {
+                        this.scene.cameras.main.flash(500, 255, 0, 0);
+                    }
+                }
+
+                this.glitchTimer = this.scene.time.delayedCall(glitch.duration, () => { 
+                    this.deactivateGlitch(); 
+                    const virusPopup = document.getElementById('virus-popup');
+                    virusPopup.classList.add('hidden');
+                    this.schedulNextGlitch(); 
+                });
                 soundFX.play('glitch');
-                // Show virus popup for 500ms
-                const virusPopup = document.getElementById('virus-popup');
-                virusPopup.classList.remove('hidden');
-                setTimeout(() => virusPopup.classList.add('hidden'), 500);
             }
             deactivateGlitch() { this.isActive = false; this.currentGlitch = null; this.lastDirection = null; }
             processMovement(left, right) {
@@ -166,6 +206,32 @@
                 this.sprite.setCollideWorldBounds(true).setBounce(0.05).setSize(12, 14).setOffset(2, 2).setDrag(200, 0);
                 this.speed = 200; this.jumpForce = -400; this.isAlive = true; this.canControl = true; this.highestY = y;
                 this.bombStunned = false; this.bombDirection = 0;
+                this.isDragging = false;
+                
+                this.sprite.setInteractive({ draggable: true });
+                this.scene.input.setDraggable(this.sprite);
+                this.scene.input.on('dragstart', (pointer, gameObject) => {
+                    if (gameObject === this.sprite) {
+                        this.isDragging = true;
+                        this.sprite.body.moves = false;
+                        this.sprite.body.setVelocity(0, 0);
+                        this.scene.showMessage("GOD MODE ACTIVATED! 👼");
+                    }
+                });
+                this.scene.input.on('drag', (pointer, gameObject, dragX, dragY) => {
+                    if (gameObject === this.sprite) {
+                        this.sprite.x = dragX;
+                        this.sprite.y = dragY;
+                    }
+                });
+                this.scene.input.on('dragend', (pointer, gameObject) => {
+                    if (gameObject === this.sprite) {
+                        this.isDragging = false;
+                        this.sprite.body.moves = true;
+                        this.highestY = this.sprite.y;
+                        this.scene.showMessage("Filthy Cheater... 😒");
+                    }
+                });
                 this.createAnimations();
             }
             generateSprites() {
@@ -205,8 +271,19 @@
                 this.scene.time.delayedCall(500, () => { this.bombStunned = false; this.sprite.clearTint(); });
             }
             update(keys, wonky) {
-                if (!this.isAlive || !this.canControl) return;
+                if (!this.isAlive || !this.canControl || this.isDragging) return;
                 const onFloor = this.sprite.body.onFloor();
+                
+                if (wonky.isActive && wonky.currentGlitch && wonky.currentGlitch.name === 'VIRUS_FREEZE') {
+                    this.sprite.setVelocityX(0);
+                    if (!onFloor) {
+                       this.sprite.anims.play(this.sprite.body.velocity.y > 0 ? 'fall' : 'jump', true);
+                    } else {
+                       this.sprite.anims.play('idle', true);
+                    }
+                    return;
+                }
+
                 if (this.bombStunned) {
                     this.sprite.setVelocityX(this.bombDirection * this.speed * 1.5);
                     this.sprite.setFlipX(this.bombDirection < 0);
